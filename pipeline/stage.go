@@ -165,3 +165,74 @@ func (p *DynamicWorkerPool) Run(ctx context.Context, params StageParams) {
 		}
 
 }
+
+
+type broadCast struct {
+	runners []StageRunner
+}
+
+
+func NewBroadCast(processors ...Processor) StageRunner {
+	runners := make([]StageRunner, len(processors))
+	for i:= 0 ;i< len(processors); i++ {
+		if len(processors) <=0 {
+			panic("Number of workers cannot be 0 or less")
+		}
+		runners[i] = FIFO(processors[i])
+
+	}
+	return & broadCast{
+		runners: runners,
+	}
+
+}
+
+func (b *broadCast) Run(ctx context.Context, params StageParams) {
+	var wg sync.WaitGroup
+	inCh := make([]chan Payload, len(b.runners))
+
+	for i:=0; i< len(b.runners); i++ {
+		go func(runnerIndex int){
+			wg.Add(1)
+			inCh[runnerIndex] = make(chan Payload)
+			stageParams := &workerParams{
+				stage:  params.StageIndex(),
+				inChan:  inCh[runnerIndex],
+				outChan: params.StageOutput(),
+				errorChan:     params.Error(),
+			}
+			b.runners[runnerIndex].Run(ctx, stageParams)
+			wg.Done()
+		}(i)
+
+	}
+
+stop:
+	for {
+		select {
+		case <- ctx.Done():
+			break stop
+		case payloadIn, ok := <- params.StageInput():
+			if !ok{
+				break stop
+			}
+
+			for i:=0; i< len(b.runners); i++ {
+				payloadClone := payloadIn.Clone()
+				select {
+				case <- ctx.Done():
+					break stop
+				case inCh[i] <- payloadClone:
+				}
+			}
+			payloadIn.MarkAsProcessed()
+		}
+	}
+
+	for i:=0; i< len(b.runners); i++ {
+		close(inCh[i])
+	}
+
+	wg.Wait()
+		
+}
