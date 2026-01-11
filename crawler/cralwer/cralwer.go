@@ -29,7 +29,7 @@ type Graph interface {
 
 
 type Indexer interface {
-	Index(doc *index.Document)
+	Index(doc *index.Document) error
 }
 
 type config struct {
