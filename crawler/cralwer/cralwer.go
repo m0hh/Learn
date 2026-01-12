@@ -1,6 +1,7 @@
 package cralwer
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -44,8 +45,10 @@ type Cralwer struct {
 	p *pipeline.Pipeline
 }
 
-func NewCrawler(cfg config) *Cralwer
- {
+func NewCrawler(cfg config) *Cralwer {
+	return &Cralwer{
+		p: assembleCralwerPipeline(cfg),
+	}
 
 }
 
@@ -54,6 +57,16 @@ func NewCrawler(cfg config) *Cralwer
 func assembleCralwerPipeline(cfg config) *pipeline.Pipeline {
 	return pipeline.NewPipeline(
 		pipeline.NewFixedWorkerPool(
-			
-		)
+			NewLinkFetcher(cfg.URLGetter,cfg.PrivateNetworkDetector),		
+			cfg.FetchWorkers,
+		),
+		pipeline.FIFO(newLinkExtractor(cfg.PrivateNetworkDetector)),
+		pipeline.FIFO(newTextExtractor()),
+		pipeline.NewBroadCast(
+			newGraphUpdater(cfg.Graph),
+			newTextIndexer(cfg.Indexer),
+		),
 	)
+}
+
+
