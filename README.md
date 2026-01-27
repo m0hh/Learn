@@ -1,2 +1,2 @@
-# Learn
-This is a repo where I write code I am trying to learn
+#Learning Repo
+Contains all the code I am trying to learn
